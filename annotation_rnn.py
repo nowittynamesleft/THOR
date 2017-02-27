@@ -209,8 +209,6 @@ def curr_func_ratio(raw_annotations, func):
 
 def get_one_func_data(X_to_predict, raw_annotations, func):
 
-    #X = get_seq_vecs(removed_entries, tokenized_sequences, uniprot_filename,
-    #                    selection, maxlen, char_indices)
     print('Function index: ' + str(func))
     mask = raw_annotations[:,func] != 0
     annotations = raw_annotations[mask].T # get only those annotations that aren't 0
@@ -260,11 +258,8 @@ def get_seq_vecs(removed_entries, tokenized_sequences, uniprot_filename,
         for i in range(0, len(sequences)):
             for j in range(0, len(sequences[i])):
                 one_hot_seqs[i][j][char_indices[sequences[i][j]]] = 1
+
         if(selection == '1'):
-            '''
-            X = np.reshape(one_hot_seqs, 
-                    (len(sequences), maxlen, len(char_indices), 1))
-            '''
             X = np.reshape(one_hot_seqs, 
                     (len(sequences), maxlen, len(char_indices)))
         else:
@@ -293,7 +288,7 @@ def get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen
     new_seqs = i[[tokenized_sequences
     X = np.zeros((len(tokenized_sequences) - len(removed_entries), 1, 300, maxlen - 5)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
     for seq_num, sequence in enumerate(new_seqs):
-        for i in range(0,len(sequence) - 5): # - 2 for trimer, -3 for three trimers per iterations
+        for i in range(0,len(sequence) - 5): # - 2 for trimer, -3 for three trimers per iteration
             for part in range(0, 3):
                 trimer = ''.join(sequence[i + part:i + part + 3])
                 if trimer in trimer_to_protvec:
@@ -561,28 +556,6 @@ def make_predictions(model, X, new_to_old_prot_inds, new_to_old_func_inds, num_s
     print('Min prediction: ' + str(min_pred))
     mean_pred = np.mean(predictions, axis=0)
     print('Average prediction: ' + str(mean_pred))
-    '''
-    accepted = 0
-    total = 0
-    scaled_preds = np.zeros(predictions.shape, dtype=np.float)
-    for j in range(0, len(predictions)):
-        for i in range(0, len(predictions[j])):
-            pred = ((float(predictions[j][i]) - float(min_pred))
-                                        /(float(max_pred) - float(min_pred)))
-            if pred > 0.0:
-                try:
-                    prediction_file.write(str(new_to_old_prot_inds[j]) + '\t' 
-                                                + str(new_to_old_func_inds[i]) 
-                                                + '\t' + str(pred) + '\n')
-                    scaled_preds[j][i] = pred
-                    accepted += 1
-                except KeyError:
-                    print(new_to_old_prot_inds[j])
-                    print(new_to_old_func_inds[i])
-            total += 1
-    print('Accepted predictions: ' + str(accepted) 
-            + ' Total predictions: ' + str(total))
-    '''
     prediction_column = np.zeros((num_seqs, 1), dtype=float)
     print('Column and then predictions')
     print(prediction_column.shape)
