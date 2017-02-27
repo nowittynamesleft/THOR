@@ -114,6 +114,7 @@ def remove_long_prots(entries, maxlen):
             entry_chars = [char for char in entry_chars if char != '\n']
         tokenized_sequences.append(entry_chars)
     print('Too long: ' + str(removed))
+    print('Number of proteins found: ' + str(len(tokenized_sequences)))
     for idx in sorted(removed_entries, reverse=True):
         del tokenized_sequences[idx]
     return tokenized_sequences, removed_entries
@@ -206,14 +207,20 @@ def curr_func_ratio(raw_annotations, func):
 def get_one_func_data(X_to_predict, raw_annotations, func):
 
     print('Function index: ' + str(func))
-    mask = raw_annotations[:,func] != 0
-    annotations = raw_annotations[mask].T # get only those annotations that aren't 0
+    print('raw_annotations shape: ' + str(raw_annotations.shape))
+    print('X_to_predict.shape: ' + str(X_to_predict.shape))
+    mask = raw_annotations[:, func] != 0
+    annots = raw_annotations[:, func]
+    annotations = annots[mask].T # get only those annotations that aren't 0
     print(annotations.shape)
     print(mask.shape)
     X = X_to_predict[mask]
     print('annotations vector shape:')
     print(annotations.shape)
     print('X.shape')
+    print(X.shape)
+    X = np.reshape(X, (X.shape[0], 1, X.shape[1], X.shape[2]))
+    print('X.shape after reshape')
     print(X.shape)
     y = np.zeros((X.shape[0]), dtype=np.float)
     print('y.shape:')
@@ -281,13 +288,11 @@ def make_protvec_dict(protvec_filename):
 def get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen):
     # Using the prot_vec_dict, transform the tokenized sequences into vectors
     # Create three trimer sets for each sequence
-    new_seqs = []
-    for i in range(0, len(tokenized_sequences)):
-        if i not in removed_entries:
-            new_seqs.append(tokenized_sequences[i])
+    new_seqs = tokenized_sequences
 
     print('Length of new_seqs: ' + str(len(new_seqs)))
     X = np.zeros((len(new_seqs), 1, 300, maxlen - 5)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
+    print('X.shape initially: ' + str(X.shape))
     for seq_num, sequence in enumerate(new_seqs):
         for i in range(0,len(sequence) - 5): # - 2 for trimer, -3 for three trimers per iteration
             for part in range(0, 3):
@@ -355,6 +360,7 @@ def main(args):
     chars, char_indices, indices_char = get_char_indices(entries)
     tokenized_sequences, removed_entries = remove_long_prots(entries, maxlen)
     #Remove from annotations
+    print('Length of tokenized sequences: ' + str(len(tokenized_sequences)))
     print('annotations shape before')
     print(annotations.shape)
     mask = np.ones(annotations.shape[0], dtype=bool)
@@ -369,7 +375,7 @@ def main(args):
     '''
     trimer_to_protvec = make_protvec_dict(args.protvecs)
     expected_seq_vec_filename = './predictions/seq_vec_maxlen_' + str(maxlen) + '.npy'
-    if os.path.isfile(expected_seq_vec_filename):
+    if os.path.isfile(expected_seq_vec_filename + 'lol'):
         print("Loading protvecs numpy mat")
         X_to_predict = np.load(expected_seq_vec_filename)
     else:
