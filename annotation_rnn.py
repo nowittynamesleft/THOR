@@ -199,9 +199,7 @@ def get_fake_data(entries, maxlen, uniprot_filename, predname, selection,
             old_to_new_prot_inds, new_to_old_prot_inds]
 
 def curr_func_ratio(raw_annotations, func):
-    mask = raw_annotations[:,func] != 0
-    annotations = raw_annotations[mask].T
-    frac = float(sum(annotations == 1.0))/float(annotations.shape[0])
+    frac = float(sum(raw_annotations[:, func] == 1.0))/float(sum(raw_annotations[:, func] != 0))
     print("Function: " + str(func) + " Pos ex ratio: " + str(frac))
     return frac 
 
@@ -283,8 +281,13 @@ def make_protvec_dict(protvec_filename):
 def get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen):
     # Using the prot_vec_dict, transform the tokenized sequences into vectors
     # Create three trimer sets for each sequence
-    new_seqs = i[[tokenized_sequences
-    X = np.zeros((len(tokenized_sequences) - len(removed_entries), 1, 300, maxlen - 5)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
+    new_seqs = []
+    for i in range(0, len(tokenized_sequences)):
+        if i not in removed_entries:
+            new_seqs.append(tokenized_sequences[i])
+
+    print('Length of new_seqs: ' + str(len(new_seqs)))
+    X = np.zeros((len(new_seqs), 1, 300, maxlen - 5)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
     for seq_num, sequence in enumerate(new_seqs):
         for i in range(0,len(sequence) - 5): # - 2 for trimer, -3 for three trimers per iteration
             for part in range(0, 3):
