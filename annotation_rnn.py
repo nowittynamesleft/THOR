@@ -41,9 +41,7 @@ K.set_image_dim_ordering('th')
 def parse_args():
     parser = argparse.ArgumentParser(description=
         'Pick model type and fasta file to train on. For testing: '
-        + 'python annotation_rnn.py -modeltype 5 -fasta '
-        + 'uniprotRefProt.9606.fasta -go real_data_prevCC '
-        + '-iterations 1 -numseqs -1 -maxlen 500 -predname test')
+        + 'python annotation_rnn.py -modeltype 3 -predname test')
     parser.add_argument('-modeltype', required=True,
                             help='model types 1, 2, 3, or 4')
     parser.add_argument('-fasta', default='group2targets.fasta', 
@@ -62,7 +60,7 @@ def parse_args():
     parser.add_argument('-predname', required=True, help='name of prediction file')
     parser.add_argument('-func_file', default='function_list.txt', help='file that contains which functions to train on')
     parser.add_argument('-fake', default='false', help='true if you want to generate fake data')
-    parser.add_argument('-protvecs', required=True, help='filename of protvecs csv')
+    parser.add_argument('-protvecs', default='protVec_100d_3grams.csv', help='filename of protvecs csv')
     return parser.parse_args()
 
 
