@@ -115,8 +115,8 @@ def remove_long_prots(entries, maxlen):
         tokenized_sequences.append(entry_chars)
     print('Too long: ' + str(removed))
     print('Number of proteins found: ' + str(len(tokenized_sequences)))
-    for idx in sorted(removed_entries, reverse=True):
-        del tokenized_sequences[idx]
+    '''
+    '''
     return tokenized_sequences, removed_entries
 
 
@@ -178,7 +178,7 @@ def get_fake_data(entries, maxlen, uniprot_filename, predname, selection,
     chars, char_indices, indices_char = get_char_indices(entries)
     old_to_new_prot_inds, new_to_old_prot_inds = index_conversions(
                                 range(0, len(tokenized_sequences)),
-                                removed_entries)
+                                removed_entries) # removes the too long prot indices
     X = get_seq_vecs(removed_entries, tokenized_sequences, uniprot_filename,
                         selection, maxlen, char_indices)
     y = np.zeros((X.shape[0]), dtype=np.bool)
@@ -220,8 +220,8 @@ def get_one_func_data(X_to_predict, raw_annotations, func):
     print(annotations.shape)
     print('X.shape')
     print(X.shape)
-    X = np.reshape(X, (X.shape[0], 1, X.shape[1], X.shape[2]))
-    print('X.shape after reshape')
+    #X = np.reshape(X, (X.shape[0], 1, X.shape[1], X.shape[2]))
+    #print('X.shape after reshape')
     print(X.shape)
     y = np.zeros((X.shape[0]), dtype=np.float)
     print('y.shape:')
@@ -279,16 +279,17 @@ def get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen
     new_seqs = tokenized_sequences
 
     print('Length of new_seqs: ' + str(len(new_seqs)))
-    X = np.zeros((len(new_seqs), 1, 300, maxlen - 5)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
+    #X = np.zeros((len(new_seqs), 1, 300, maxlen - 5)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
+    X = np.zeros((len(new_seqs), maxlen - 5, 300)) #shape of trimer vectors, 300 dimensions (100 for each vector in the stride) x maxlen x numseqs)
     print('X.shape initially: ' + str(X.shape))
     for seq_num, sequence in enumerate(new_seqs):
         for i in range(0,len(sequence) - 5): # - 2 for trimer, -3 for three trimers per iteration
             for part in range(0, 3):
                 trimer = ''.join(sequence[i + part:i + part + 3])
                 if trimer in trimer_to_protvec:
-                    X[seq_num, 0, part*100:(part + 1)*100, i] = trimer_to_protvec[trimer]
-                else:
-                    X[seq_num, 0, part*100:(part + 1)*100, i] = trimer_to_protvec['<unk>']
+                    X[seq_num, i, part*100:(part + 1)*100] = trimer_to_protvec[trimer]
+                else:                                    
+                    X[seq_num, i, part*100:(part + 1)*100] = trimer_to_protvec['<unk>']
     return X
 
 def center_sequences(sequences, maxlen, value=0.0, dtype=np.float):
@@ -347,12 +348,16 @@ def main(args):
     print("Max length of protein: " + str(maxlen))
     chars, char_indices, indices_char = get_char_indices(entries)
     tokenized_sequences, removed_entries = remove_long_prots(entries, maxlen)
+    used_seqs = list(tokenized_sequences)
+    for idx in sorted(removed_entries, reverse=True):
+        del used_seqs[idx]
     #Remove from annotations
-    print('Length of tokenized sequences: ' + str(len(tokenized_sequences)))
+    print('Number of tokenized sequences: ' + str(len(tokenized_sequences)))
     print('annotations shape before')
     print(annotations.shape)
+    original_shape = annotations.shape
     mask = np.ones(annotations.shape[0], dtype=bool)
-    mask[removed_entries] = False
+    mask[removed_entries] = False #remove prots above maxlen
     annotations = annotations[mask]
     old_to_new_prot_inds, new_to_old_prot_inds = index_conversions(
                                 range(0, len(tokenized_sequences)),
@@ -364,7 +369,7 @@ def main(args):
             X_to_predict = np.load(expected_seq_vec_filename)
         else:
             print("Generating one hot vecs for fasta")
-            X_to_predict = get_seq_vecs(removed_entries, tokenized_sequences, args.fasta,
+            X_to_predict = get_seq_vecs(removed_entries, used_seqs, args.fasta,
                        args.modeltype, maxlen, char_indices)
             np.save(expected_seq_vec_filename, X_to_predict)
     else:
@@ -375,7 +380,7 @@ def main(args):
             X_to_predict = np.load(expected_seq_vec_filename)
         else:
             print("Generating protvecs for fasta")
-            X_to_predict = get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen)
+            X_to_predict = get_protvecs(removed_entries, used_seqs, trimer_to_protvec, maxlen)
             np.save(expected_seq_vec_filename, X_to_predict)
     print('X_to_predict shape')
     print(X_to_predict.shape)
@@ -385,7 +390,7 @@ def main(args):
     list_of_funcs = open(args.func_file, 'r').read().split('\n')
     list_of_funcs.pop()
 
-    prediction_matrix = np.zeros_like(annotations)
+    prediction_matrix = np.zeros(shape=original_shape, dtype=float)
     for func in list_of_funcs:
         if(args.fake.lower() == 'true'):
             print('Getting fake data')
@@ -426,6 +431,7 @@ def main(args):
                 print('Training model...')
                 train_model(args.iterations, model, X, y, args.modeltype,
                                     len(entries), args.predname)
+                test_model(model, X_test, y_test)
                 print('Prediction after training. Shape of X_to_predict: ' + str(X_to_predict.shape)) 
                 preds = make_predictions(model, X_to_predict, new_to_old_prot_inds, new_to_old_func_inds,
                     len(entries))
@@ -482,8 +488,12 @@ def build_model(selection, maxlen, output_size, input_alphabet_size, X):
     elif(selection == 2):
         print('Build model 2: conv1d instead of LSTM')
         model = Sequential()
-        model.add(Convolution1D(32, 3, input_dim=input_alphabet_size, 
-            input_length=maxlen))
+        print(input_alphabet_size)
+        print(maxlen)
+        print(X.shape[1])
+        print(X.shape[2])
+        model.add(Convolution1D(32, 3, input_dim=X.shape[2], 
+            input_length=X.shape[1]))
         model.add(Activation('relu'))
         model.add(MaxPooling1D(pool_length=3))
 
@@ -566,7 +576,8 @@ def make_predictions(model, X, new_to_old_prot_inds, new_to_old_func_inds, num_s
     print(prediction_column.shape)
     print(predictions.shape)
     for i in range(0, len(predictions)):
-        prediction_column[new_to_old_prot_inds[i]] = round(predictions[i], 2)
+        old_ind = new_to_old_prot_inds[i]
+        prediction_column[old_ind] = round(predictions[i], 2)
 
     return prediction_column
 
