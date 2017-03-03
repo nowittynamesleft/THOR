@@ -9,6 +9,8 @@ There are 4 models in this file that you can train:
     4. LSTM -> GRU -> traditional layer
 '''
 from __future__ import print_function
+from keras import backend as K # MUST be before the other keras import statements
+K.set_image_dim_ordering('th')
 from keras.utils.np_utils import to_categorical
 import keras.models
 import re
@@ -34,8 +36,6 @@ from Bio import SeqIO
 import argparse
 import os
 import collections
-from keras import backend as K
-K.set_image_dim_ordering('th')
 
 
 def parse_args():
@@ -208,12 +208,13 @@ def get_one_func_data(X_to_predict, raw_annotations, func):
 
     print('Function index: ' + str(func))
     print('raw_annotations shape: ' + str(raw_annotations.shape))
-    print('X_to_predict.shape: ' + str(X_to_predict.shape))
-    mask = raw_annotations[:, func] != 0
     annots = raw_annotations[:, func]
-    annotations = annots[mask].T # get only those annotations that aren't 0
-    print(annotations.shape)
+    mask = np.array(annots != 0)
+    mask = np.reshape(np.array(annots != 0), (mask.shape[0]))
+    annotations = annots[mask] # get only those annotations that aren't 0
+    print('Mask shape before')
     print(mask.shape)
+    print('X_to_predict.shape: ' + str(X_to_predict.shape))
     X = X_to_predict[mask]
     print('annotations vector shape:')
     print(annotations.shape)
@@ -245,31 +246,18 @@ def get_seq_vecs(removed_entries, tokenized_sequences, uniprot_filename,
     expected_seq_vec_filename = ('./predictions/seq_vectors_' 
             + uniprot_filename + 'model_' + str(selection) + '_maxlen_' 
             + str(maxlen) + '_fake' + '.npy')
-    for idx in sorted(removed_entries, reverse=True):
-        del tokenized_sequences[idx]
     print('New number of tokenized sequences after removal of '
             + str(len(removed_entries)) + ' sequences: '
             + str(len(tokenized_sequences)))
-    if(os.path.isfile(expected_seq_vec_filename + 'lol')):
-        print('Loading seq vectors')
-        X = np.load(expected_seq_vec_filename)
-    else:
-        print('Generating seq vectors')
-        sequences = center_sequences(tokenized_sequences, maxlen=maxlen,
-                                                        dtype=np.str_)
-        one_hot_seqs = np.zeros((len(sequences), maxlen, len(char_indices)))
-        for i in range(0, len(sequences)):
-            for j in range(0, len(sequences[i])):
-                one_hot_seqs[i][j][char_indices[sequences[i][j]]] = 1
+    print('Generating seq vectors')
+    sequences = center_sequences(tokenized_sequences, maxlen=maxlen,
+                                                    dtype=np.str_)
+    one_hot_seqs = np.zeros((len(sequences), maxlen, len(char_indices)))
+    for i in range(0, len(sequences)):
+        for j in range(0, len(sequences[i])):
+            one_hot_seqs[i][j][char_indices[sequences[i][j]]] = 1
 
-        if(selection == '1'):
-            X = np.reshape(one_hot_seqs, 
-                    (len(sequences), maxlen, len(char_indices)))
-        else:
-            X = np.reshape(one_hot_seqs, 
-                    (len(sequences), maxlen, len(char_indices)))
-        np.save(expected_seq_vec_filename, X)
-    return X
+    return one_hot_seqs
 
 
 def make_protvec_dict(protvec_filename):
@@ -369,19 +357,26 @@ def main(args):
     old_to_new_prot_inds, new_to_old_prot_inds = index_conversions(
                                 range(0, len(tokenized_sequences)),
                                 removed_entries) # just for index conversions after predictions are made
-    '''
-    X_to_predict = get_seq_vecs(removed_entries, tokenized_sequences, args.fasta,
+    if args.protvecs.lower() == 'false':
+        expected_seq_vec_filename = './predictions/one_hot_maxlen_' + str(maxlen) + '.npy'
+        if os.path.isfile(expected_seq_vec_filename + 'lol'):
+            print("Loading one hot numpy mat")
+            X_to_predict = np.load(expected_seq_vec_filename)
+        else:
+            print("Generating one hot vecs for fasta")
+            X_to_predict = get_seq_vecs(removed_entries, tokenized_sequences, args.fasta,
                        args.modeltype, maxlen, char_indices)
-    '''
-    trimer_to_protvec = make_protvec_dict(args.protvecs)
-    expected_seq_vec_filename = './predictions/seq_vec_maxlen_' + str(maxlen) + '.npy'
-    if os.path.isfile(expected_seq_vec_filename + 'lol'):
-        print("Loading protvecs numpy mat")
-        X_to_predict = np.load(expected_seq_vec_filename)
+            np.save(expected_seq_vec_filename, X_to_predict)
     else:
-        print("Generating protvecs for fasta")
-        X_to_predict = get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen)
-        np.save(expected_seq_vec_filename, X_to_predict)
+        trimer_to_protvec = make_protvec_dict(args.protvecs)
+        expected_seq_vec_filename = './predictions/ProtVec_maxlen_' + str(maxlen) + '.npy'
+        if os.path.isfile(expected_seq_vec_filename + 'lol'):
+            print("Loading protvecs numpy mat")
+            X_to_predict = np.load(expected_seq_vec_filename)
+        else:
+            print("Generating protvecs for fasta")
+            X_to_predict = get_protvecs(removed_entries, tokenized_sequences, trimer_to_protvec, maxlen)
+            np.save(expected_seq_vec_filename, X_to_predict)
     print('X_to_predict shape')
     print(X_to_predict.shape)
     print('annotations shape')
@@ -412,7 +407,7 @@ def main(args):
         print(collections.Counter(y))
         frac = float(collections.Counter(y)[1.0])/float(sum(collections.Counter(y).values()))
         
-        model = build_model(int(args.modeltype), maxlen, len(new_to_old_func_inds), len(indices_char))
+        model = build_model(int(args.modeltype), maxlen, len(new_to_old_func_inds), len(indices_char), X)
         if model == None:
             print("Not a valid selection of model. Stopping.")
             return
@@ -425,7 +420,7 @@ def main(args):
             if args.loadmodel != None:
                 print('Loading model...')
                 model.load_weights(args.loadmodel)
-                preds = make_predictions(model, X, new_to_old_prot_inds, new_to_old_func_inds, len(entries))
+                preds = make_predictions(model, X_to_predict, new_to_old_prot_inds, new_to_old_func_inds, len(entries))
                 prediction_matrix[:, func] = preds[:, 0]
             else:
                 print('Training model...')
@@ -469,7 +464,7 @@ def test_model(model, X_test, y_test):
                                                             sample_weight=None))
 
 
-def build_model(selection, maxlen, output_size, input_alphabet_size):
+def build_model(selection, maxlen, output_size, input_alphabet_size, X):
     model = None
     if(selection == 1):
         print('Build model 1: LSTM, dense, activation')
@@ -508,7 +503,10 @@ def build_model(selection, maxlen, output_size, input_alphabet_size):
     elif(selection == 3):
         print('Build model 2: conv2d')
         model = Sequential()
-        model.add(Convolution2D(32, 9, 9, input_shape=(1, 300, maxlen - 5)))
+        print(X.shape[1])
+        print(X.shape[2])
+        print(X.shape[3])
+        model.add(Convolution2D(32, 9, 9, input_shape=(X.shape[1], X.shape[2], X.shape[3])))
         model.add(Activation('relu'))
         model.add(MaxPooling2D(pool_size=(3,3)))
 
