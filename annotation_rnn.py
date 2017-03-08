@@ -61,6 +61,7 @@ def parse_args():
     parser.add_argument('-func_file', default='function_list.txt', help='file that contains which functions to train on')
     parser.add_argument('-fake', default='false', help='true if you want to generate fake data')
     parser.add_argument('-protvecs', default='protVec_100d_3grams.csv', help='filename of protvecs csv')
+    parser.add_argument('-threshold', default='0.1', help='threshold for the ratio of pos examples to decide to train network on')
     return parser.parse_args()
 
 
@@ -337,6 +338,7 @@ def index_conversions(inds, removed_inds):
 
 
 def main(args):
+    ratio_threshold = float(args.threshold)
     entries = load_FASTA(args.fasta)
     num_seqs = int(args.numseqs)
     annotations = make_prot_annotation_matrix(args.go)
@@ -400,7 +402,7 @@ def main(args):
                             num_seqs)
         else: 
             print('Getting data from annotation file')
-            if not curr_func_ratio(annotations, int(func)) > 0.1:
+            if not curr_func_ratio(annotations, int(func)) > ratio_threshold:
                 continue
             else:
                 [X, X_test, y, y_test] = get_one_func_data(X_to_predict, annotations, int(func))
@@ -452,7 +454,7 @@ def main(args):
     print('Done')
     # Write prediction matrix to text file
     print('Writing prediction matrix to text file')
-    outfile = open('predictionsgroup2ccALL.txt', 'w')
+    outfile = open('predictions/prediction_' + args.predname + '.txt', 'w')
     for i in range(prediction_matrix.shape[0]):
         for j in range(prediction_matrix.shape[1]):
             if prediction_matrix[i,j] != 0.00:
